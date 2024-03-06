@@ -1,46 +1,59 @@
 package si.kkobau;
 
-import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.NewTopic;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.OnOverflow;
+import org.jboss.logging.Logger;
 
-import java.util.Collections;
-import java.util.Properties;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 
 @ApplicationScoped
 public class EventEmitter {
 
-    @ConfigProperty(name = "kafka.bootstrap.servers")
-    private String bootstrapServers;
+    private static final Logger LOG = Logger.getLogger(EventEmitter.class);
 
-    private Admin kafkaAdmin;
+    @Channel("match-topic")
+    @OnOverflow(value = OnOverflow.Strategy.BUFFER)
+    private Emitter<String> matchEmitter;
 
-    private void onStart(@Observes StartupEvent ev) {
-        Properties properties = new Properties();
-        properties.put(
-                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers
-        );
+    @ConfigProperty(name = "matchfile.location")
+    private String matchFileLocation;
 
-        this.kafkaAdmin = Admin.create(properties);
+    void onStart(@Observes StartupEvent ev) {
+        try(InputStream matchStream = getMatchStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(matchStream))) {
+
+            while (reader.ready()) {
+                String line = reader.readLine();
+                sendLineToKafka(line);
+            }
+
+        } catch (IOException e) {
+            LOG.error("Error handling file", e);
+            throw new RuntimeException(e);
+        }
     }
 
-    private void onStop(@Observes ShutdownEvent ev) {
-        kafkaAdmin.close();
+    private InputStream getMatchStream() {
+        InputStream ioStream = this.getClass()
+                .getClassLoader()
+                .getResourceAsStream(matchFileLocation);
+
+        if (ioStream == null) {
+            throw new IllegalArgumentException(matchFileLocation + " is not found");
+        }
+        return ioStream;
     }
 
-    private void createTopic(String topicName) {
-        int partitions = 1;
-        short replicationFactor = 1;
-        NewTopic newTopic = new NewTopic(topicName, partitions, replicationFactor);
-
-        kafkaAdmin.createTopics(
-                Collections.singleton(newTopic)
-        );
+    private void sendLineToKafka(String line) {
+        matchEmitter.send(line);
     }
 }
