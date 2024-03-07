@@ -10,6 +10,8 @@ import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.OnOverflow;
 import org.jboss.logging.Logger;
 
+import io.smallrye.reactive.messaging.kafka.Record;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,7 +24,7 @@ public class EventEmitter {
 
     @Channel("match-topic")
     @OnOverflow(value = OnOverflow.Strategy.BUFFER)
-    private Emitter<String> matchEmitter;
+    private Emitter<Record<String, String>> matchEmitter;
 
     @ConfigProperty(name = "matchfile.location")
     private String matchFileLocation;
@@ -54,6 +56,8 @@ public class EventEmitter {
     }
 
     private void sendLineToKafka(String line) {
-        matchEmitter.send(line);
+        String key = line.split("\\|")[0];
+
+        matchEmitter.send(Record.of(key, line));
     }
 }
