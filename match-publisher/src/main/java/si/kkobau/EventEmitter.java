@@ -2,12 +2,15 @@ package si.kkobau;
 
 import io.quarkus.runtime.StartupEvent;
 
+import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import org.apache.kafka.common.protocol.types.Field;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.OnOverflow;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.jboss.logging.Logger;
 
 import io.smallrye.reactive.messaging.kafka.Record;
@@ -22,26 +25,13 @@ public class EventEmitter {
 
     private static final Logger LOG = Logger.getLogger(EventEmitter.class);
 
-    @Channel("match-topic")
-    @OnOverflow(value = OnOverflow.Strategy.BUFFER)
-    private Emitter<Record<String, String>> matchEmitter;
-
     @ConfigProperty(name = "matchfile.location")
     private String matchFileLocation;
 
-    void onStart(@Observes StartupEvent ev) {
-        try(InputStream matchStream = getMatchStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(matchStream))) {
-
-            while (reader.ready()) {
-                String line = reader.readLine();
-                sendLineToKafka(line);
-            }
-
-        } catch (IOException e) {
-            LOG.error("Error handling file", e);
-            throw new RuntimeException(e);
-        }
+    @Outgoing("match-topic")
+    public Multi<Record<String, String>> generate() {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(getMatchStream()));
+        return Multi.createFrom().items(reader.lines().map(this::lineToRecord));
     }
 
     private InputStream getMatchStream() {
@@ -55,9 +45,8 @@ public class EventEmitter {
         return ioStream;
     }
 
-    private void sendLineToKafka(String line) {
+    private Record<String, String> lineToRecord(String line) {
         String key = line.split("\\|")[0];
-
-        matchEmitter.send(Record.of(key, line));
+        return Record.of(key, line);
     }
 }
