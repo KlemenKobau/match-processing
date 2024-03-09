@@ -1,23 +1,38 @@
 package si.kkobau;
 
-import io.quarkus.runtime.StartupEvent;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
+import io.smallrye.mutiny.Uni;
+import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.*;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
 import org.jboss.logging.Logger;
+import si.kkobau.data.Match;
+import si.kkobau.data.MatchService;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @ApplicationScoped
 public class MatchConsumer {
 
     private static final Logger LOG = Logger.getLogger(MatchConsumer.class);
+    private final MatchService matchService;
 
-    void onStart(@Observes StartupEvent ev) {
-
+    @Inject
+    public MatchConsumer(MatchService matchService) {
+        this.matchService = matchService;
     }
 
     @Incoming("match-topic")
-    void processMatch(String match) {
-        LOG.info(match);
+    @WithTransaction
+    Uni<Void> processMatch(List<String> matchInput) {
+        List<Match> matches = new ArrayList<>();
+        for (String matchString : matchInput) {
+            Match match = matchService.createMatch(matchString);
+            matches.add(match);
+        }
+
+        return Match.persist(matches);
     }
 }

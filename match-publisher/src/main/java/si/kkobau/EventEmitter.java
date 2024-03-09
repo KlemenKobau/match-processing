@@ -1,14 +1,8 @@
 package si.kkobau;
 
-import io.quarkus.runtime.StartupEvent;
-
 import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
-import org.apache.kafka.common.protocol.types.Field;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.OnOverflow;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.jboss.logging.Logger;
@@ -16,9 +10,9 @@ import org.jboss.logging.Logger;
 import io.smallrye.reactive.messaging.kafka.Record;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.stream.Stream;
 
 @ApplicationScoped
 public class EventEmitter {
@@ -29,9 +23,14 @@ public class EventEmitter {
     private String matchFileLocation;
 
     @Outgoing("match-topic")
+    @OnOverflow(OnOverflow.Strategy.BUFFER)
     public Multi<Record<String, String>> generate() {
+        LOG.info("Started sending");
         BufferedReader reader = new BufferedReader(new InputStreamReader(getMatchStream()));
-        return Multi.createFrom().items(reader.lines().map(this::lineToRecord));
+        Stream<Record<String, String>> itemStream = reader.lines().skip(1).map(this::lineToRecord)
+                .onClose(() -> LOG.info("Stopped sending"));
+
+        return Multi.createFrom().items(itemStream);
     }
 
     private InputStream getMatchStream() {
