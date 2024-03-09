@@ -2,7 +2,7 @@
 
 CREATE SEQUENCE match_seq START WITH 1 INCREMENT BY 50;
 
-CREATE TABLE m
+CREATE TABLE match
 (
     id bigint DEFAULT nextval('match_seq') NOT NULL,
     createdAt timestamp with time zone,

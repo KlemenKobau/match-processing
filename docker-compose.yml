@@ -1,0 +1,56 @@
+version: "3.8"
+services:
+  match-publisher:
+    image: dev/match-publisher:1.0.0-SNAPSHOT
+    pull_policy: missing
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+  match-consumer:
+    image: dev/match-consumer:1.0.0-SNAPSHOT
+    pull_policy: missing
+    deploy:
+      replicas: 5
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://postgres:5432/postgres
+      - QUARKUS_DATASOURCE_USERNAME=postgres
+      - QUARKUS_DATASOURCE_PASSWORD=postgres
+    depends_on:
+      kafka:
+        condition: service_healthy
+  kafka:
+    image: bitnami/kafka:3.7.0
+    logging:
+      driver: none
+    healthcheck:
+      test: ["CMD", "kafka-cluster.sh", "cluster-id", "--bootstrap-server", "localhost:9092"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # Data
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=5
+  postgres:
+    image: postgres:15.6-alpine3.19
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - ./match-consumer/src/main/resources/db/migration:/docker-entrypoint-initdb.d
