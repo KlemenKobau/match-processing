@@ -2,7 +2,7 @@ version: "3.8"
 services:
   match-publisher:
     image: dev/match-publisher:1.0.0-SNAPSHOT
-    pull_policy: missing
+    pull_policy: never
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     depends_on:
@@ -10,7 +10,7 @@ services:
         condition: service_healthy
   match-consumer:
     image: dev/match-consumer:1.0.0-SNAPSHOT
-    pull_policy: missing
+    pull_policy: never
     deploy:
       replicas: 5
     environment:
@@ -21,6 +21,15 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+  match-validator:
+    image: dev/match-validator:1.0.0-SNAPSHOT
+    pull_policy: never
+    profiles:
+      - donotstart # only here to prevent the service from autostarting
+    environment:
+      - QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://postgres:5432/postgres
+      - QUARKUS_DATASOURCE_USERNAME=postgres
+      - QUARKUS_DATASOURCE_PASSWORD=postgres
   kafka:
     image: bitnami/kafka:3.7.0
     logging:
@@ -47,7 +56,7 @@ services:
   postgres:
     image: postgres:15.6-alpine3.19
     ports:
-      - 5432:5432
+      - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
